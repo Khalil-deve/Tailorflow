@@ -1,0 +1,16 @@
+name: Publish preview update
+
+# Every push to main publishes an over-the-air update for the installed preview APK.
+# It deliberately does not create a new APK on every push.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish_update:
+    name: Publish update to preview users
+    type: update
+    params:
+      channel: preview
+      message: ${{ github.commit_message }}
