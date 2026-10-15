@@ -21,7 +21,6 @@ import { AppButton } from '@/components/ui/AppButton';
 import { AppCard } from '@/components/ui/AppCard';
 import { AppHeader } from '@/components/ui/AppHeader';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { orders as fallbackOrders } from '@/constants/data';
 import { useDataStore } from '@/stores/dataStore';
 import type { OrderStatus } from '@/types/domain';
 import { colors, radius, shadow } from '@/theme';
@@ -40,7 +39,18 @@ export default function OrderDetails() {
   const router = useRouter();
   const { getOrderById, updateOrderStatus, getMeasurements } = useDataStore();
 
-  const currentOrder = getOrderById(id || '') ?? fallbackOrders.find((o) => o.id === id) ?? fallbackOrders[0]!;
+  const currentOrder = getOrderById(id || '');
+
+  if (!currentOrder) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <AppHeader title="Order" back />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>This order is not available in this tailor account.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const [currentStatus, setCurrentStatus] = useState<OrderStatus>(currentOrder.status);
   const [statusMessage, setStatusMessage] = useState<string>('');

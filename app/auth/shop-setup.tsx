@@ -7,6 +7,7 @@ import {
   Check,
   Globe,
   MapPin,
+  Lock,
   Phone,
   Store,
   User,
@@ -14,6 +15,7 @@ import {
 import {
   Keyboard,
   KeyboardAvoidingView,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -25,6 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppStore } from '@/stores/appStore';
+import { useDataStore } from '@/stores/dataStore';
 import { colors, radius, shadow } from '@/theme';
 
 interface FieldProps {
@@ -33,6 +36,7 @@ interface FieldProps {
   value: string;
   onChangeText: (text: string) => void;
   keyboardType?: 'default' | 'phone-pad';
+  secureTextEntry?: boolean;
   icon?: React.ReactNode;
 }
 
@@ -42,6 +46,7 @@ function Field({
   value,
   onChangeText,
   keyboardType = 'default',
+  secureTextEntry = false,
   icon,
 }: FieldProps) {
   return (
@@ -55,6 +60,7 @@ function Field({
           value={value}
           onChangeText={onChangeText}
           keyboardType={keyboardType}
+          secureTextEntry={secureTextEntry}
           style={styles.input}
         />
       </View>
@@ -64,12 +70,14 @@ function Field({
 
 export default function ShopSetup() {
   const router = useRouter();
-  const { finishOnboarding, login, setLocale, setShop, shop, locale } = useAppStore();
+  const { registerTailor, setLocale, locale } = useAppStore();
+  const { switchTailor } = useDataStore();
 
-  const [shopName, setShopName] = useState(shop?.name || '');
-  const [ownerName, setOwnerName] = useState(shop?.ownerName || '');
-  const [phone, setPhone] = useState(shop?.phone || '');
-  const [city, setCity] = useState(shop?.city || shop?.address || '');
+  const [shopName, setShopName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [pin, setPin] = useState('');
+  const [city, setCity] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ur'>(locale || 'en');
 
   const isUrdu = selectedLanguage === 'ur';
@@ -77,15 +85,19 @@ export default function ShopSetup() {
   const handleSubmit = () => {
     Keyboard.dismiss();
     setLocale(selectedLanguage);
-    setShop({
-      name: shopName.trim() || 'Ahmed Tailors',
-      ownerName: ownerName.trim() || 'Ahmed',
-      phone: phone.trim() || '0300 1234567',
-      address: city.trim() || 'Lahore',
-      city: city.trim() || 'Lahore',
+    const result = registerTailor({
+      name: shopName.trim(),
+      ownerName: ownerName.trim(),
+      phone: phone.trim(),
+      address: city.trim(),
+      city: city.trim(),
+      pin,
     });
-    login();
-    finishOnboarding();
+    if (!result.account) {
+      Alert.alert('Could not register shop', result.error || 'Please check your details and try again.');
+      return;
+    }
+    switchTailor(result.account.id);
     router.replace('/(tabs)');
   };
 
@@ -157,6 +169,16 @@ export default function ShopSetup() {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               icon={<Phone size={18} color={colors.muted} />}
+            />
+
+            <Field
+              label={isUrdu ? '4 ہندسوں کا پن' : 'Create a 4-Digit PIN'}
+              placeholder="e.g. 1234"
+              value={pin}
+              onChangeText={(value) => setPin(value.replace(/\D/g, '').slice(0, 4))}
+              keyboardType="phone-pad"
+              secureTextEntry
+              icon={<Lock size={18} color={colors.muted} />}
             />
 
             <Field

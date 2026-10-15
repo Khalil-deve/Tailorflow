@@ -1,14 +1,16 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import type { Customer, Order, OrderStatus } from '@/types/domain';
 import { customers as initialCustomers, orders as initialOrders } from '@/constants/data';
+import { sqliteStorage, syncBusinessTables } from '@/services/storage/sqliteStorage';
 
 export interface DataState {
   customers: Customer[];
   orders: Order[];
   customerMeasurements: Record<string, Record<string, string>>;
+  activeTailorId?: string;
+  tailorData: Record<string, TailorData>;
+  switchTailor: (tailorId: string) => void;
 
   // Customer Actions
   addCustomer: (data: {
@@ -47,46 +49,17 @@ export interface DataState {
   clearAllData: () => void;
 }
 
-const memoryStorage: Record<string, string> = {};
+export interface TailorData {
+  customers: Customer[];
+  orders: Order[];
+  customerMeasurements: Record<string, Record<string, string>>;
+}
 
-const getStorageBackend = () => {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage;
-    }
-    return {
-      getItem: (name: string) => memoryStorage[name] ?? null,
-      setItem: (name: string, value: string) => {
-        memoryStorage[name] = value;
-      },
-      removeItem: (name: string) => {
-        delete memoryStorage[name];
-      },
-    };
-  }
-
-  return {
-    getItem: async (name: string): Promise<string | null> => {
-      try {
-        const val = await SecureStore.getItemAsync(name);
-        if (val !== null) return val;
-      } catch { }
-      return memoryStorage[name] ?? null;
-    },
-    setItem: async (name: string, value: string): Promise<void> => {
-      memoryStorage[name] = value;
-      try {
-        await SecureStore.setItemAsync(name, value);
-      } catch { }
-    },
-    removeItem: async (name: string): Promise<void> => {
-      delete memoryStorage[name];
-      try {
-        await SecureStore.deleteItemAsync(name);
-      } catch { }
-    },
-  };
-};
+const emptyTailorData = (): TailorData => ({
+  customers: [],
+  orders: [],
+  customerMeasurements: {},
+});
 
 export const useDataStore = create<DataState>()(
   persist(
@@ -105,6 +78,29 @@ export const useDataStore = create<DataState>()(
           'Pancha': '8.5',
         },
       },
+      activeTailorId: undefined,
+      tailorData: {},
+      switchTailor: (tailorId) =>
+        set((state) => {
+          const savedData = state.activeTailorId
+            ? {
+                ...state.tailorData,
+                [state.activeTailorId]: {
+                  customers: state.customers,
+                  orders: state.orders,
+                  customerMeasurements: state.customerMeasurements,
+                },
+              }
+            : state.tailorData;
+          const nextData = savedData[tailorId] || emptyTailorData();
+          return {
+            activeTailorId: tailorId,
+            tailorData: savedData,
+            customers: nextData.customers,
+            orders: nextData.orders,
+            customerMeasurements: nextData.customerMeasurements,
+          };
+        }),
 
       addCustomer: (data) => {
         const initials = data.name
@@ -277,7 +273,23 @@ export const useDataStore = create<DataState>()(
     }),
     {
       name: 'tailorflow-offline-data',
-      storage: createJSONStorage(getStorageBackend),
+      storage: createJSONStorage(() => sqliteStorage),
     }
   )
 );
+
+const syncDataToTables = () => {
+  const state = useDataStore.getState();
+  const dataByTailor = { ...state.tailorData };
+  if (state.activeTailorId) {
+    dataByTailor[state.activeTailorId] = {
+      customers: state.customers,
+      orders: state.orders,
+      customerMeasurements: state.customerMeasurements,
+    };
+  }
+  void syncBusinessTables(dataByTailor);
+};
+
+useDataStore.subscribe(syncDataToTables);
+useDataStore.persist.onFinishHydration(syncDataToTables);

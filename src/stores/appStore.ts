@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import type { Locale } from '@/i18n';
+import { sqliteStorage, syncTailorTables } from '@/services/storage/sqliteStorage';
 
 export interface ShopInfo {
   name: string;
@@ -10,6 +9,24 @@ export interface ShopInfo {
   phone: string;
   address: string;
   city: string;
+}
+
+export interface TailorAccount {
+  id: string;
+  phone: string;
+  pin: string;
+  shop: ShopInfo;
+  createdAt: string;
+}
+
+/** Converts common Pakistani mobile formats to 923XXXXXXXXX for reliable matching. */
+export function normalizePakistanPhone(value: string): string | undefined {
+  let digits = value.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('92')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  const normalized = `92${digits}`;
+  return /^923\d{9}$/.test(normalized) ? normalized : undefined;
 }
 
 export interface MeasurementField {
@@ -154,12 +171,15 @@ export interface AppState {
   onboarded: boolean;
   isLoggedIn: boolean;
   shop: ShopInfo;
+  accounts: TailorAccount[];
+  activeTailorId?: string;
   measurementTemplates: Record<string, MeasurementField[]>;
   garmentPricing: GarmentPricing;
   cutSpecifications: CutCategory[];
   setLocale: (locale: Locale) => void;
   finishOnboarding: () => void;
-  login: () => void;
+  registerTailor: (data: ShopInfo & { pin: string }) => { account?: TailorAccount; error?: string };
+  authenticate: (phone: string, pin: string) => TailorAccount | undefined;
   logout: () => void;
   setShop: (shop: Partial<ShopInfo>) => void;
   toggleMeasurementField: (garment: string, fieldId: string) => void;
@@ -173,50 +193,9 @@ export interface AppState {
   resetCutSpecifications: () => void;
 }
 
-const memoryStorage: Record<string, string> = {};
-
-const getStorageBackend = () => {
-  if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage;
-    }
-    return {
-      getItem: (name: string) => memoryStorage[name] ?? null,
-      setItem: (name: string, value: string) => {
-        memoryStorage[name] = value;
-      },
-      removeItem: (name: string) => {
-        delete memoryStorage[name];
-      },
-    };
-  }
-
-  return {
-    getItem: async (name: string): Promise<string | null> => {
-      try {
-        const val = await SecureStore.getItemAsync(name);
-        if (val !== null) return val;
-      } catch {}
-      return memoryStorage[name] ?? null;
-    },
-    setItem: async (name: string, value: string): Promise<void> => {
-      memoryStorage[name] = value;
-      try {
-        await SecureStore.setItemAsync(name, value);
-      } catch {}
-    },
-    removeItem: async (name: string): Promise<void> => {
-      delete memoryStorage[name];
-      try {
-        await SecureStore.deleteItemAsync(name);
-      } catch {}
-    },
-  };
-};
-
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       locale: 'en',
       onboarded: false,
       isLoggedIn: false,
@@ -227,13 +206,67 @@ export const useAppStore = create<AppState>()(
         address: 'Gulberg',
         city: 'Lahore',
       },
+      accounts: [],
+      activeTailorId: undefined,
       measurementTemplates: DEFAULT_MEASUREMENT_TEMPLATES,
       setLocale: (locale) => set({ locale }),
       finishOnboarding: () => set({ onboarded: true, isLoggedIn: true }),
-      login: () => set({ isLoggedIn: true, onboarded: true }),
+      registerTailor: (data) => {
+        const phone = normalizePakistanPhone(data.phone);
+        if (!phone) return { error: 'Enter a valid Pakistani mobile number, for example 0300 1234567.' };
+        if (!/^\d{4}$/.test(data.pin)) return { error: 'Choose a 4-digit PIN.' };
+        if (!data.name.trim() || !data.ownerName.trim() || !data.city.trim()) {
+          return { error: 'Shop name, owner name, and city/area are required.' };
+        }
+        if (get().accounts.some((account) => account.phone === phone)) {
+          return { error: 'An account already exists for this phone number. Please sign in.' };
+        }
+        const account: TailorAccount = {
+          id: `tailor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          phone,
+          pin: data.pin,
+          shop: {
+            name: data.name.trim(),
+            ownerName: data.ownerName.trim(),
+            phone: data.phone.trim(),
+            address: data.address.trim() || data.city.trim(),
+            city: data.city.trim(),
+          },
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          accounts: [...state.accounts, account],
+          activeTailorId: account.id,
+          shop: account.shop,
+          isLoggedIn: true,
+          onboarded: true,
+        }));
+        return { account };
+      },
+      authenticate: (phone, pin) => {
+        const normalizedPhone = normalizePakistanPhone(phone);
+        if (!normalizedPhone) return undefined;
+        const account = get().accounts.find((item) => item.phone === normalizedPhone && item.pin === pin);
+        if (!account) return undefined;
+        set({
+          activeTailorId: account.id,
+          shop: account.shop,
+          isLoggedIn: true,
+          onboarded: true,
+        });
+        return account;
+      },
       logout: () => set({ isLoggedIn: false, onboarded: false }),
       setShop: (newShop) =>
-        set((state) => ({ shop: { ...state.shop, ...newShop } })),
+        set((state) => {
+          const shop = { ...state.shop, ...newShop };
+          return {
+            shop,
+            accounts: state.accounts.map((account) =>
+              account.id === state.activeTailorId ? { ...account, shop } : account
+            ),
+          };
+        }),
       toggleMeasurementField: (garment, fieldId) =>
         set((state) => {
           const list = state.measurementTemplates[garment] || DEFAULT_MEASUREMENT_TEMPLATES[garment] || [];
@@ -329,7 +362,14 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'tailorflow-app-storage',
-      storage: createJSONStorage(getStorageBackend),
+      storage: createJSONStorage(() => sqliteStorage),
     }
   )
 );
+
+const syncAccountsToTables = () => {
+  void syncTailorTables(useAppStore.getState().accounts);
+};
+
+useAppStore.subscribe(syncAccountsToTables);
+useAppStore.persist.onFinishHydration(syncAccountsToTables);

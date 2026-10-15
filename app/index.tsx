@@ -6,7 +6,7 @@ import { colors } from '@/theme';
 
 export default function Index() {
   const isLoggedIn = useAppStore((state) => state.isLoggedIn);
-  const onboarded = useAppStore((state) => state.onboarded);
+  const activeTailorId = useAppStore((state) => state.activeTailorId);
   const [hasHydrated, setHasHydrated] = useState(
     () => useAppStore.persist?.hasHydrated?.() ?? false
   );
@@ -49,7 +49,7 @@ export default function Index() {
   }
 
   // If tailor is already logged in or has set up their shop, go straight to CRM Dashboard!
-  if (isLoggedIn || onboarded) {
+  if (isLoggedIn && activeTailorId) {
     return <Redirect href="/(tabs)" />;
   }
 

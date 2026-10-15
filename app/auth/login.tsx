@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ArrowRight, KeyRound, Lock, Phone, Scissors } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, KeyRound, Lock, Phone, Scissors, UserPlus } from 'lucide-react-native';
 import {
   Keyboard,
   KeyboardAvoidingView,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,27 +15,41 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppStore } from '@/stores/appStore';
+import { normalizePakistanPhone, useAppStore } from '@/stores/appStore';
+import { useDataStore } from '@/stores/dataStore';
 import { colors, radius, shadow } from '@/theme';
 
 export default function Login() {
   const router = useRouter();
-  const { login, finishOnboarding } = useAppStore();
+  const { accounts, authenticate } = useAppStore();
+  const { switchTailor } = useDataStore();
   const [authMode, setAuthMode] = useState<'phone' | 'pin'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [pin, setPin] = useState('');
 
   const handlePhoneSubmit = () => {
     Keyboard.dismiss();
-    login();
-    finishOnboarding();
-    router.replace('/(tabs)');
+    const normalizedPhone = normalizePakistanPhone(phoneNumber);
+    if (!normalizedPhone) {
+      Alert.alert('Enter a valid phone number', 'Use a Pakistani mobile number, for example 0300 1234567.');
+      return;
+    }
+    const accountExists = accounts.some((account) => account.phone === normalizedPhone);
+    if (!accountExists) {
+      Alert.alert('Shop not registered', 'Create a tailor account first. Your customers and orders will stay private to that account.');
+      return;
+    }
+    setAuthMode('pin');
   };
 
   const handlePinSubmit = () => {
     Keyboard.dismiss();
-    login();
-    finishOnboarding();
+    const account = authenticate(phoneNumber, pin);
+    if (!account) {
+      Alert.alert('Login failed', 'Check your phone number and 4-digit PIN.');
+      return;
+    }
+    switchTailor(account.id);
     router.replace('/(tabs)');
   };
 
@@ -94,7 +109,7 @@ export default function Login() {
                     <Phone size={18} color={colors.muted} />
                     <TextInput
                       keyboardType="phone-pad"
-                      placeholder="3XX XXXXXXX"
+                      placeholder="300 1234567"
                       placeholderTextColor={colors.muted}
                       style={styles.input}
                       value={phoneNumber}
@@ -118,16 +133,9 @@ export default function Login() {
                     <ArrowRight size={18} color={colors.white} strokeWidth={2.5} />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.switchModeBtn}
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setAuthMode('pin');
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <KeyRound size={16} color={colors.primaryDark} strokeWidth={2.2} />
-                    <Text style={styles.switchModeText}>Use 4-Digit Quick PIN instead</Text>
+                  <TouchableOpacity style={styles.signUpBtn} onPress={() => router.push('/auth/shop-setup')} activeOpacity={0.7}>
+                    <UserPlus size={16} color={colors.primaryDark} strokeWidth={2.2} />
+                    <Text style={styles.switchModeText}>New tailor? Register your shop</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -187,7 +195,7 @@ export default function Login() {
                     activeOpacity={0.7}
                   >
                     <Phone size={16} color={colors.primaryDark} strokeWidth={2.2} />
-                    <Text style={styles.switchModeText}>Use Mobile Number instead</Text>
+                    <Text style={styles.switchModeText}>Change mobile number</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -331,6 +339,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryStrong,
   },
   switchModeBtn: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  signUpBtn: {
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
