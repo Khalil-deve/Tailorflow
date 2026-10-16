@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Banknote, Bell, ClipboardList, Plus, Ruler, UsersRound } from 'lucide-react-native';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppStore } from '@/stores/appStore';
 import { useDataStore } from '@/stores/dataStore';
 import { colors, radius, shadow } from '@/theme';
 
@@ -15,16 +16,19 @@ const shortcuts = [
 
 export default function Home() {
   const router = useRouter();
+  const shop = useAppStore((state) => state.shop);
   const { customers, orders } = useDataStore();
   const due = orders.reduce((total, order) => total + order.balance, 0);
   const unpaid = orders.filter((order) => order.balance > 0).length;
+
+  const displayName = shop?.name || shop?.ownerName || 'TailorFlow';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.shop}>Ahmed Tailors</Text>
+            <Text style={styles.shop}>{displayName}</Text>
             <Text style={styles.welcome}>Your shop at a glance</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bell}>

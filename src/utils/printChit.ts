@@ -1,7 +1,9 @@
 import * as Print from 'expo-print';
 import { Alert } from 'react-native';
+import { useAppStore } from '@/stores/appStore';
 
 export interface CuttingChitData {
+
   orderNumber?: string;
   customerName: string;
   phone: string;
@@ -187,7 +189,7 @@ export async function printCuttingChit(data: CuttingChitData): Promise<boolean> 
           ` : ''}
 
           <div class="footer">
-            Pin to fabric bundle · Ahmed Tailors
+            Pin to fabric bundle · ${useAppStore.getState().shop?.name || 'TailorFlow'}
           </div>
         </div>
       </body>
