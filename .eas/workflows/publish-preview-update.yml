@@ -13,4 +13,5 @@ jobs:
     type: update
     params:
       channel: preview
+      platform: android #[android only]
       message: ${{ github.commit_message }}
