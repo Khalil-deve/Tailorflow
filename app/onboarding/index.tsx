@@ -107,7 +107,7 @@ export default function Onboarding() {
             onPress={toggleLanguage}
             activeOpacity={0.7}
           >
-            <Globe size={15} color={colors.primaryDark} />
+            {/* <Globe size={15} color={colors.primaryDark} /> */}
             <Text style={styles.langPillText}>
               {isUrdu ? 'English' : 'اردو'}
             </Text>
@@ -221,7 +221,7 @@ export default function Onboarding() {
         </View>
 
         {/* Live Tailor Experience Preview Banner */}
-        <View style={styles.bannerCard}>
+        <View >
           <View style={styles.bannerContent}>
             <Text style={styles.bannerTag}>
               {isUrdu ? 'ماسٹر اور کاریگر' : 'For Masters & Stitchers'}

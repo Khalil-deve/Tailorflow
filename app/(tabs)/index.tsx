@@ -20,8 +20,14 @@ export default function Home() {
   const { customers, orders } = useDataStore();
   const due = orders.reduce((total, order) => total + order.balance, 0);
   const unpaid = orders.filter((order) => order.balance > 0).length;
-
   const displayName = shop?.name || shop?.ownerName || 'TailorFlow';
+
+  const hasNotifications = orders.some(
+    (o) =>
+      o.balance > 0 ||
+      o.status === 'ready' ||
+      (o.deliveryDate?.toLowerCase().includes('today') && o.status !== 'delivered')
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -33,7 +39,7 @@ export default function Home() {
           </View>
           <TouchableOpacity onPress={() => router.push('/notifications')} style={styles.bell}>
             <Bell size={21} color={colors.primaryDark} />
-            <View style={styles.dot} />
+            {hasNotifications && <View style={styles.dot} />}
           </TouchableOpacity>
         </View>
 

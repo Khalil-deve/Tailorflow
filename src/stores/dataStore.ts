@@ -64,20 +64,9 @@ const emptyTailorData = (): TailorData => ({
 export const useDataStore = create<DataState>()(
   persist(
     (set, get) => ({
-      customers: initialCustomers,
-      orders: initialOrders,
-      customerMeasurements: {
-        '1': {
-          'Length': '40.5',
-          'Shoulder': '17.5',
-          'Chest': '22.0',
-          'Sleeves': '23.5',
-          'Collar': '15.5',
-          'Daman': '23.0',
-          'Shalwar Length': '38.0',
-          'Pancha': '8.5',
-        },
-      },
+      customers: [],
+      orders: [],
+      customerMeasurements: {},
       activeTailorId: undefined,
       tailorData: {},
       switchTailor: (tailorId) =>
